@@ -6,6 +6,7 @@ from random import shuffle
 from async_timeout import timeout
 from music_cog.song import Song, SongTask
 from music_cog.spotify_loader import SpotifyLoader
+from music_cog import config
 import asyncio
 
 class Playlist(asyncio.Queue):
@@ -25,8 +26,9 @@ class Playlist(asyncio.Queue):
             await self.loader.put_songtask(song.songtask)
 
     def __str__(self) -> str:
-        ret = ""
-        for i, song in enumerate(self._queue):
+        ret = "" if len(self._queue) <= config.QUEUE_EMBED_MAX_LEN else f"**Showing first {config.QUEUE_EMBED_MAX_LEN} items:**\n"
+
+        for i, song in list(enumerate(self._queue))[:config.QUEUE_EMBED_MAX_LEN]:
             ret = ret + f"**{i+1}.** {str(song)}\n"
         
         if not len(self._queue):
@@ -71,7 +73,7 @@ class MusicState:
     async def _play_song(self):
         if not self.is_looping:
             try:
-                async with timeout(60):
+                async with timeout(config.INACTIVITY_TIMEOUT):
                     self.current_song = await self.playlist.get()
             except asyncio.TimeoutError:
                 self.bot.loop.create_task(self.cleanup())
@@ -109,7 +111,7 @@ class MusicState:
                 await self.playlist.put(song)
             await ctx.message.add_reaction("👍")
         elif "youtube" in query and "list=" in query:
-            entries = load_youtube_playlist(query)
+            entries = await load_youtube_playlist(query, self.bot.loop)
             if not entries:
                 await ctx.send(embed=embed_text("Error: Empty or invalid YouTube playlist"))
                 return
