@@ -1,0 +1,1 @@
+MAX_LOAD_COUNT = 5
