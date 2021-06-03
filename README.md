@@ -1,1 +1,3 @@
-# octave_bot
+# octave
+
+Discord music bot written using discord.py
