@@ -5,6 +5,10 @@ class SongTask:
     def __init__(self):
         self.task: asyncio.Task = None
         self.event = asyncio.Event()
+        self.started = False
+
+    def _del_(self):
+        self.task.cancel()
 
     async def wait_loader(self):
         return await self.task

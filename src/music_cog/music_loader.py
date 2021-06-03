@@ -24,9 +24,9 @@ async def YTDL_load_info(query: str, loop: asyncio.BaseEventLoop):
     info = await loop.run_in_executor(None, method)
     return info
 
-async def load_source(url: str, volume: float = 0.75):
+async def load_source(url: str, volume: float):
     source = discord.FFmpegPCMAudio(url, **config.FFMPEG_OPTIONS)
-    return MusicSource(source, volume)
+    return discord.PCMVolumeTransformer(source, volume=volume)
 
 class MusicLoaderQueue(asyncio.Queue):
     def clear(self):
@@ -52,10 +52,11 @@ class MusicLoader:
     async def _load_next(self):
         while True:
             songtask = await self.get_songtask()
-            if songtask.task.done():
+            if songtask.started:
                 continue
             await self._sem.acquire() 
             songtask.event.set()
+            songtask.started = True
 
     async def add_task(self, query: str) -> asyncio.Task:
         song_task = SongTask()
@@ -71,28 +72,35 @@ class MusicLoader:
     async def _YTDL_search_song(self, query: str):
         async def YTDL_load_info(query: str):
             ytdl = youtube_dl.YoutubeDL(config.YTDL_OPTIONS)
-            method = functools.partial(ytdl.extract_info, query, download=False)
-            info = await self._bot.loop.run_in_executor(None, method)
+            try:
+                method = functools.partial(ytdl.extract_info, query, download=False)
+                info = await self._bot.loop.run_in_executor(None, method)
+            except Exception as e:
+                print(f"error: {e}")
+                info = dict()
             return info
         info = await self._bot.loop.create_task(YTDL_load_info(query))
         url = info.get("url")
         if not url:
             entries = info.get("entries")
             if not entries:
-                print("song not found")
+                print(f"song not found: {query}")
                 return
             webpage_url = entries[0].get("webpage_url")
             if not webpage_url:
-                print("song not found")
+                print(f"song not found: {query}")
                 return
             info = await self._bot.loop.create_task(YTDL_load_info(webpage_url))
             url = info.get("url")
             if not url:
-                print("song not found")
+                print(f"song not found: {query}")
                 return
         return info
 
     def cleanup(self):
+        self._load_next_task.cancel()
+    
+    def _del_(self):
         self._load_next_task.cancel()
 
 async def load_youtube_playlist(url: str, loop: asyncio.BaseEventLoop):
@@ -104,4 +112,3 @@ async def load_youtube_playlist(url: str, loop: asyncio.BaseEventLoop):
     info = await loop.create_task(YTDL_load_info(url))
     entries = info.get("entries")
     return entries
-    
